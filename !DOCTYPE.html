@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Padel Game</title>
+    <!-- Tailwind CSS CDN for easy styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.js CDN for audio generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <style>
+        /* Custom styles for the game */
+        body {
+            font-family: 'Inter', sans-serif; /* Using Inter font for a clean look */
+            /* Vibrant gradient background */
+            background: linear-gradient(135deg, #a78bfa, #f472b6, #ef4444);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh; /* Full viewport height */
+            margin: 0;
+            overflow: hidden; /* Prevent scrolling */
+        }
+        .game-container {
+            background-color: #ffffff; /* White background for the game area */
+            border-radius: 1.5rem; /* Rounded corners */
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2); /* Deeper shadow */
+            padding: 1.5rem;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 95%; /* Responsive width */
+            max-width: 500px; /* Max width for larger screens */
+            box-sizing: border-box; /* Include padding in width */
+            position: relative; /* For mute button positioning */
+        }
+        canvas {
+            background-color: #bfdbfe; /* Light blue background for the canvas (court) */
+            border-radius: 1rem; /* Rounded corners for the canvas */
+            border: 2px solid #60a5fa; /* Border around the canvas */
+            display: block;
+            width: 100%; /* Canvas takes full width of its container */
+            height: 400px; /* Increased height for better gameplay */
+            margin-top: 1rem;
+            cursor: none; /* Hide default cursor to use custom racket */
+        }
+        .game-info {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            margin-bottom: 1rem;
+            gap: 1rem; /* Space between info elements */
+        }
+        .info-box {
+            background-color: #dbeafe; /* Lighter blue for info boxes */
+            padding: 0.75rem 1rem;
+            border-radius: 0.75rem;
+            font-size: 1.125rem; /* Larger text */
+            font-weight: 600;
+            color: #1e40af; /* Darker blue text */
+            flex-grow: 1; /* Allow boxes to grow */
+        }
+        .start-button {
+            background-color: #8b5cf6; /* Purple background */
+            color: white;
+            padding: 0.75rem 2rem;
+            border: none;
+            border-radius: 9999px; /* Fully rounded button */
+            font-size: 1.25rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.1s ease; /* Smooth transitions */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Soft shadow */
+            margin-top: 1.5rem;
+            outline: none; /* Remove outline on focus */
+        }
+        .start-button:hover {
+            background-color: #7c3aed; /* Darker purple on hover */
+            transform: translateY(-2px); /* Slight lift effect */
+        }
+        .start-button:active {
+            transform: translateY(0); /* Press down effect */
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        /* Message box styling */
+        .message-box {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 1000;
+            display: none; /* Hidden by default */
+            font-size: 1.2rem;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        .message-box button {
+            background-color: #8b5cf6; /* Purple for message box button */
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background-color 0.3s ease;
+        }
+        .message-box button:hover {
+            background-color: #7c3aed;
+        }
+        .mute-button {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.75rem;
+            font-size: 0.9rem;
+            cursor: pointer;
+            z-index: 1001;
+            border: none;
+            transition: background-color 0.3s ease;
+            outline: none; /* Remove outline on focus */
+        }
+        .mute-button:hover {
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <button id="muteButton" class="mute-button">Mute</button>
+        <h1 class="text-3xl font-extrabold text-gray-800 mb-4">Padel Game!</h1>
+        <div class="game-info">
+            <div id="score-display" class="info-box">Score: 0</div>
+            <div id="high-score-display" class="info-box">High Score: 0</div>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+        <button id="startButton" class="start-button">Start Game</button>
+    </div>
+
+    <!-- Message Box for game alerts -->
+    <div id="messageBox" class="message-box">
+        <p id="messageText"></p>
+        <button id="messageBoxOkButton">OK</button>
+    </div>
+
+    <script>
+        // Get references to HTML elements
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startButton = document.getElementById('startButton');
+        const scoreDisplay = document.getElementById('score-display');
+        const highScoreDisplay = document.getElementById('high-score-display');
+        const messageBox = document.getElementById('messageBox');
+        const messageText = document.getElementById('messageText');
+        const messageBoxOkButton = document.getElementById('messageBoxOkButton');
+        const muteButton = document.getElementById('muteButton');
+
+        // Game variables
+        let score = 0;
+        let highScore = localStorage.getItem('padelHighScore') || 0; // Load high score from local storage
+        let gameRunning = false;
+        let animationFrameId; // To control the animation loop
+
+        // Ball properties
+        let ball = {
+            x: 0,
+            y: 0,
+            radius: 10, // Initial size will be set in resetGame
+            dx: 5,      // Initial velocity will be set in resetGame
+            dy: -5,     // Initial velocity will be set in resetGame
+            color: '#FFD700', // Yellow color for the tennis ball
+            minRadius: 5 // Minimum size the ball can shrink to
+        };
+
+        // Racket properties
+        let racket = {
+            width: 100,
+            height: 15,
+            x: 0,
+            y: 0, // Racket Y position will be fixed near the bottom
+            color: '#333333' // Dark color for the racket
+        };
+
+        // Tone.js audio setup
+        const Tone = window.Tone;
+        let hitSynth;
+        let kickSynth;
+        let melodySynth;
+        let melodyPart;
+        let kickPart;
+        let isMuted = false;
+
+        // Function to set up audio synths and loops
+        function setupAudio() {
+            // Synth for ball hit sound (short, percussive)
+            hitSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "triangle" },
+                envelope: {
+                    attack: 0.001,
+                    decay: 0.1,
+                    sustain: 0.05,
+                    release: 0.1
+                }
+            }).toDestination();
+
+            // Synth for kick drum
+            kickSynth = new Tone.MembraneSynth({
+                pitchDecay: 0.05,
+                octaves: 10,
+                oscillator: { type: "sine" },
+                envelope: {
+                    attack: 0.001,
+                    decay: 0.4,
+                    sustain: 0.01,
+                    release: 1.4,
+                    attackCurve: "exponential"
+                }
+            }).toDestination();
+
+            // Synth for melodic background music
+            melodySynth = new Tone.Synth({
+                oscillator: { type: "sawtooth" }, // Sawtooth for a sharper, modern sound
+                envelope: {
+                    attack: 0.02,
+                    decay: 0.3,
+                    sustain: 0.2,
+                    release: 0.5
+                }
+            }).toDestination();
+
+            // Kick drum pattern
+            kickPart = new Tone.Sequence((time, note) => {
+                kickSynth.triggerAttackRelease(note, "8n", time);
+            }, ["C2", ["C2", null, "C2"], "C2", null], "4n"); // Simple 4-on-the-floor with some variation
+
+            // Melodic pattern
+            melodyPart = new Tone.Part((time, note) => {
+                melodySynth.triggerAttackRelease(note, "8n", time);
+            }, [
+                ["0:0:0", "C4"],
+                ["0:0:2", "E4"],
+                ["0:1:0", "G4"],
+                ["0:1:2", "E4"],
+                ["0:2:0", "C4"],
+                ["0:2:2", "D4"],
+                ["0:3:0", "E4"],
+                ["0:3:2", "F4"]
+            ]);
+
+            // Set loop points for melody and kick
+            kickPart.loop = true;
+            kickPart.loopEnd = "2m"; // Loop every 2 measures
+            melodyPart.loop = true;
+            melodyPart.loopEnd = "2m"; // Loop every 2 measures
+
+            // Start parts
+            kickPart.start(0);
+            melodyPart.start(0);
+        }
+
+        // Function to play the ball hit sound
+        function playHitSound() {
+            if (!isMuted && hitSynth) {
+                hitSynth.triggerAttackRelease("C5", "8n"); // Play a C5 note
+            }
+        }
+
+        // Function to toggle mute state
+        function toggleMute() {
+            isMuted = !isMuted;
+            if (isMuted) {
+                Tone.Destination.mute = true;
+                muteButton.textContent = "Unmute";
+            } else {
+                Tone.Destination.mute = false;
+                muteButton.textContent = "Mute";
+            }
+        }
+
+        // Function to show custom message box (reused from previous version)
+        function showMessageBox(message) {
+            messageText.textContent = message;
+            messageBox.style.display = 'block';
+        }
+
+        // Event listener for message box OK button
+        messageBoxOkButton.addEventListener('click', () => {
+            messageBox.style.display = 'none';
+        });
+
+        // Function to update high score
+        function updateHighScore() {
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('padelHighScore', highScore); // Save to local storage
+                highScoreDisplay.textContent = `High Score: ${highScore}`;
+            }
+        }
+
+        // Initial drawing of the canvas (e.g., a welcome message)
+        function drawInitialScreen() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.font = '24px Inter';
+            ctx.fillStyle = '#1e40af'; /* Darker blue text */
+            ctx.textAlign = 'center';
+            ctx.fillText('Move mouse to control racket!', canvas.width / 2, canvas.height / 2 - 30);
+            ctx.fillText('Click Start to Play!', canvas.width / 2, canvas.height / 2);
+        }
+
+        // Ensure canvas dimensions are set correctly for drawing
+        function resizeCanvas() {
+            const computedStyle = getComputedStyle(canvas);
+            canvas.width = parseFloat(computedStyle.width);
+            canvas.height = parseFloat(computedStyle.height);
+
+            // Adjust racket and ball positions if canvas resizes during game (optional, but good for robustness)
+            if (!gameRunning) {
+                drawInitialScreen(); // Redraw initial screen if not running
+            }
+            racket.y = canvas.height - racket.height - 10; // Racket position fixed near bottom
+            // Re-center racket horizontally if it's not the start of the game
+            if (!gameRunning) {
+                 racket.x = (canvas.width - racket.width) / 2;
+            }
+        }
+
+        // Call resizeCanvas initially and on window resize
+        window.addEventListener('load', () => {
+            resizeCanvas();
+            highScoreDisplay.textContent = `High Score: ${highScore}`; // Display high score on load
+        });
+        window.addEventListener('resize', resizeCanvas);
+
+        // Draw the ball
+        function drawBall() {
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fillStyle = ball.color;
+            ctx.fill();
+            ctx.strokeStyle = '#DAA520'; // Darker yellow border
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            ctx.closePath();
+        }
+
+        // Draw the racket
+        function drawRacket() {
+            ctx.beginPath();
+            ctx.roundRect(racket.x, racket.y, racket.width, racket.height, 5); // Rounded rectangle for racket
+            ctx.fillStyle = racket.color;
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        // Draw the court lines (optional, for visual appeal)
+        function drawCourtLines() {
+            ctx.strokeStyle = '#60a5fa'; // Same as canvas border
+            ctx.lineWidth = 2;
+
+            // Middle line (dashed)
+            ctx.beginPath();
+            ctx.setLineDash([5, 5]); // Dashed line
+            ctx.moveTo(0, canvas.height / 2);
+            ctx.lineTo(canvas.width, canvas.height / 2);
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset line dash
+
+            // Half-court line near racket (solid)
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height - racket.height - 30);
+            ctx.lineTo(canvas.width, canvas.height - racket.height - 30);
+            ctx.stroke();
+            ctx.closePath();
+        }
+
+
+        // Update game state (ball position, collisions)
+        function updateGame() {
+            // Move the ball
+            ball.x += ball.dx;
+            ball.y += ball.dy;
+
+            // Ball collision with walls
+            // Left and right walls
+            if (ball.x + ball.radius > canvas.width || ball.x - ball.radius < 0) {
+                ball.dx = -ball.dx; // Reverse horizontal direction
+            }
+            // Top wall
+            if (ball.y - ball.radius < 0) {
+                ball.dy = -ball.dy; // Reverse vertical direction
+            }
+
+            // Ball collision with racket
+            if (ball.y + ball.radius > racket.y && // Ball's bottom is below racket's top
+                ball.x + ball.radius > racket.x && // Ball's right is past racket's left
+                ball.x - ball.radius < racket.x + racket.width && // Ball's left is before racket's right
+                ball.dy > 0 // Ball is moving downwards
+            ) {
+                ball.dy = -ball.dy; // Reverse vertical direction
+                score++; // Increase score
+                scoreDisplay.textContent = `Score: ${score}`;
+                playHitSound(); // Play sound on hit
+
+                // Decrease ball radius, but not below minRadius
+                if (ball.radius > ball.minRadius) {
+                    ball.radius -= 0.5; // Shrink by 0.5 pixels per hit
+                }
+
+                // Increase ball speed slightly after each hit for more challenge
+                if (Math.abs(ball.dx) < 15) ball.dx *= 1.05;
+                if (Math.abs(ball.dy) < 15) ball.dy *= 1.05;
+            }
+
+            // Ball missed the racket (game over)
+            if (ball.y + ball.radius > canvas.height) {
+                endGame();
+            }
+        }
+
+        // Main drawing function
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
+            drawCourtLines(); // Draw court lines
+            drawBall(); // Draw ball
+            drawRacket(); // Draw racket
+        }
+
+        // Game loop
+        function gameLoop() {
+            if (gameRunning) {
+                updateGame(); // Update game state
+                draw();       // Draw elements
+                animationFrameId = requestAnimationFrame(gameLoop); // Request next frame
+            }
+        }
+
+        // Reset game state
+        function resetGame() {
+            score = 0;
+            scoreDisplay.textContent = `Score: ${score}`;
+            ball.x = canvas.width / 2;
+            ball.y = canvas.height / 2;
+            ball.radius = 20; // Start with a larger ball
+            ball.dx = 3 * (Math.random() > 0.5 ? 1 : -1); // Start slower
+            ball.dy = -3; // Start slower and moving upwards
+            racket.x = (canvas.width - racket.width) / 2; // Center racket
+        }
+
+        // Start the game
+        async function startGame() {
+            if (!gameRunning) {
+                gameRunning = true;
+                startButton.disabled = true; // Disable button while game is running
+
+                // Start Tone.js context and background music only after user interaction
+                if (Tone.context.state !== 'running') {
+                    await Tone.start();
+                }
+                if (!kickPart || !melodyPart) { // Setup audio only once
+                    setupAudio();
+                }
+                Tone.Transport.start(); // Start Tone.js transport for loops
+
+                resetGame(); // Reset game state for a new round
+                gameLoop(); // Start the animation loop
+            }
+        }
+
+        // End the game
+        function endGame() {
+            gameRunning = false;
+            cancelAnimationFrame(animationFrameId); // Stop the animation loop
+            startButton.disabled = false; // Re-enable start button
+            updateHighScore(); // Check and update high score
+            showMessageBox(`Game Over! Your score: ${score}\nHigh Score: ${highScore}`);
+            Tone.Transport.stop(); // Stop background music
+            drawInitialScreen(); // Show initial screen after game over
+        }
+
+        // Event listener for racket movement (mouse/touch)
+        canvas.addEventListener('mousemove', (event) => {
+            if (!gameRunning) return;
+            const rect = canvas.getBoundingClientRect();
+            // Calculate mouse X position relative to canvas
+            let mouseX = event.clientX - rect.left;
+
+            // Keep racket within canvas bounds
+            racket.x = mouseX - racket.width / 2;
+            if (racket.x < 0) {
+                racket.x = 0;
+            }
+            if (racket.x + racket.width > canvas.width) {
+                racket.x = canvas.width - racket.width;
+            }
+        });
+
+        // For touch devices, handle touchmove for racket control
+        canvas.addEventListener('touchmove', (event) => {
+            if (!gameRunning) return;
+            event.preventDefault(); // Prevent scrolling on touch
+            const rect = canvas.getBoundingClientRect();
+            let touchX = event.touches[0].clientX - rect.left;
+
+            racket.x = touchX - racket.width / 2;
+            if (racket.x < 0) {
+                racket.x = 0;
+            }
+            if (racket.x + racket.width > canvas.width) {
+                racket.x = canvas.width - racket.width;
+            }
+        }, { passive: false }); // Use passive: false to allow preventDefault
+
+        // Event listener for the start button
+        startButton.addEventListener('click', startGame);
+
+        // Event listener for the mute button
+        muteButton.addEventListener('click', toggleMute);
+
+        // Initial call to draw the welcome screen when the page loads
+        window.onload = drawInitialScreen;
+
+    </script>
+</body>
+</html>
